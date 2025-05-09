@@ -1,0 +1,4 @@
+sentence-transformers
+numpy
+hf_xet
+psycopg2-binary>=2.9.3

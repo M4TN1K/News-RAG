@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.DS_Store
+
+# VSCode/Cursor
+.vscode/
+.idea/
+
+# Airflow
+logs/
+*.pid
+
+# Docker
+*.env
+.env
+.env.*
+*.db
+*.sqlite3
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Data
+src/RAG/data/*
+!src/RAG/data/.gitkeep
+
+# Pycache
+src/*/__pycache__/
+
+# Secrets
+**/secrets/
+**/credentials/
+**/config/secrets/
+**/config/credentials/ 

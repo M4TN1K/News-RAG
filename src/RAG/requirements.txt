@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+huggingface_hub
+psycopg2-binary
+sentence-transformers
+faiss-cpu
+pydantic
+python-dotenv
