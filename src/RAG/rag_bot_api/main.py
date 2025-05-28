@@ -1,33 +1,36 @@
-# main.py
-
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from rag_bot_api.rag_service import RAGService
-from huggingface_hub import InferenceClient
+import httpx
 import os
 from dotenv import load_dotenv
+from rag_bot_api.rag_service import RAGService
 
 
+load_dotenv()
 
 app = FastAPI(title="RAG Bot API")
 
+
 rag = RAGService()
 
-client = InferenceClient(
-    provider="hf-inference",
-    api_key=os.getenv("HF_API_TOKEN")
-)
 
-model_name = "HuggingFaceH4/zephyr-7b-beta"
+PROXY_API_KEY = os.getenv("PROXY_API_KEY")
+MODEL_NAME = "gpt-3.5-turbo"
 
-prompt_template  = """
-Ты помощник, который отвечает на вопросы, используя предоставленный контекст.
 
-Контекст:
+PROXY_API_URL = "https://api.proxyapi.ru/openai/v1/chat/completions"
+
+prompt_template = """
+Ты — новостной блогер. Используй следующую информацию для ответа:
+
 {context}
 
-Вопрос:
-{question}
+Вопрос: {question}
+
+Инструкции:
+- Опираешься только на эту статью.
+- Если информация не соответствует вопросу — скажи об этом.
+- Указывай дату и источник, если это релевантно.
 """
 
 
@@ -38,12 +41,10 @@ class QuestionRequest(BaseModel):
 @app.post("/ask")
 async def ask(request: QuestionRequest):
     """
-    Обработчик POST-запроса для получения ответа на вопрос.
-
-    :param request: Объект запроса, содержащий вопрос.
-    :return: Словар с ответом и использованным контекстом.
+    Обработчик POST-запроса для получения ответа
     """
     try:
+        # Получение контекста с помощью RAG
         rag_result = rag.answer(request.question)
 
         prompt = prompt_template.format(context=rag_result["context"], question=request.question)
@@ -53,14 +54,27 @@ async def ask(request: QuestionRequest):
             {"role": "user", "content": prompt}
         ]
 
-        completion = client.chat.completions.create(
-            model=model_name,
-            messages=messages,
-            temperature=0.3,
-            max_tokens=200
-        )
+        payload = {
+            "model": MODEL_NAME,
+            "messages": messages,
+            "temperature": 0.3,
+            "max_tokens": 200
+        }
 
-        answer = completion.choices[0].message.content
+        headers = {
+            "Authorization": f"Bearer {PROXY_API_KEY}",
+            "Content-Type": "application/json"
+        }
+
+        # Отправка запроса через ProxyAPI
+        async with httpx.AsyncClient() as client:
+            response = await client.post(PROXY_API_URL, json=payload, headers=headers)
+
+        if response.status_code != 200:
+            raise HTTPException(status_code=response.status_code, detail=response.text)
+
+        data = response.json()
+        answer = data["choices"][0]["message"]["content"]
 
         return {
             "answer": answer,
