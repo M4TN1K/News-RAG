@@ -1,9 +1,28 @@
+# API и сервер
 fastapi
 uvicorn
-huggingface_hub
+pydantic
+
+# Telegram Bot
+aiogram
+
+# Работа с базой данных
 psycopg2-binary
+
+# Поиск и векторные представления
 sentence-transformers
 faiss-cpu
-pydantic
+huggingface_hub
+
+# LangChain и работа с API OpenAI
+langchain-core
+langchain
+langchain-openai
+openai
+cohere
+
+# Утилиты
 python-dotenv
 httpx
+tqdm
+numpy

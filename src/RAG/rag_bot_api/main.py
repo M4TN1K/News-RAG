@@ -1,24 +1,48 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request, Query
 from pydantic import BaseModel
 import httpx
 import os
+import logging
+import time
 from dotenv import load_dotenv
 from rag_bot_api.rag_service import RAGService
 
 
 load_dotenv()
 
-app = FastAPI(title="RAG Bot API")
+# Настройка логирования
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
-
-rag = RAGService()
-
-
+# Получение переменных окружения
 PROXY_API_KEY = os.getenv("PROXY_API_KEY")
-MODEL_NAME = "gpt-3.5-turbo"
+MODEL_NAME = os.getenv("MODEL_NAME", "gpt-3.5-turbo")
+USE_AGENTS = os.getenv("USE_AGENTS", "True").lower() == "true"
+PROXY_API_URL = os.getenv("PROXY_API_URL", "https://api.proxyapi.ru/openai/v1/chat/completions")
+
+app = FastAPI(title="RAG Bot API", description="API для получения информации из новостных источников для Telegram бота")
+
+@app.middleware("http")
+async def add_process_time_header(request: Request, call_next):
+    start_time = time.time()
+    response = await call_next(request)
+    process_time = time.time() - start_time
+    response.headers["X-Process-Time"] = str(process_time)
+    logger.info(f"Запрос {request.url.path} обработан за {process_time:.4f} сек")
+    return response
 
 
-PROXY_API_URL = "https://api.proxyapi.ru/openai/v1/chat/completions"
+# Инициализация сервиса RAG
+rag = RAGService(
+    api_key=PROXY_API_KEY,
+    model_name=MODEL_NAME,
+    use_agents=USE_AGENTS
+)
+
+logger.info(f"RAG Bot API запущен. Использование агентов: {USE_AGENTS}, Модель: {MODEL_NAME}, ProxyAPI URL: {PROXY_API_URL}")
 
 prompt_template = """
 Ты — новостной блогер. Используй следующую информацию для ответа:
@@ -36,12 +60,20 @@ prompt_template = """
 
 class QuestionRequest(BaseModel):
     question: str
+    k: int = 3  # Количество документов для поиска (по умолчанию 3)
+    detailed: bool = False  # Включить детальную информацию о работе агентов
 
 
 @app.post("/ask")
 async def ask(request: QuestionRequest):
     """
-    Обработчик POST-запроса для получения ответа
+    Обработчик POST-запроса для получения ответа на вопрос от Telegram бота
+
+    Args:
+        request: Запрос с вопросом пользователя и дополнительными параметрами
+
+    Returns:
+        Ответ на вопрос в формате, подходящем для Telegram бота
     """
     try:
         # Получение контекста с помощью RAG
@@ -77,9 +109,14 @@ async def ask(request: QuestionRequest):
         answer = data["choices"][0]["message"]["content"]
 
         return {
-            "answer": answer,
-            "context_used": rag_result["context_used"]
+            "answer": answer
         }
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Ошибка при обработке запроса: {str(e)}")
+        raise HTTPException(
+            status_code=500, 
+            detail={
+                "error": str(e)
+            }
+        )
