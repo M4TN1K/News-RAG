@@ -7,13 +7,12 @@ import httpx
 import json
 from typing import List, Dict, Any, Optional
 
-# Импорты из LangChain
+
 from langchain.chains import LLMChain
 from langchain.prompts import PromptTemplate
 from langchain_core.language_models import BaseChatModel
 from langchain_core.documents import Document
 from langchain.retrievers import ContextualCompressionRetriever
-from langchain.retrievers.document_compressors import CohereRerank
 from langchain_openai import ChatOpenAI
 
 logger = logging.getLogger(__name__)
@@ -105,55 +104,99 @@ class DocumentReranker:
     """Агент для переранжирования документов"""
 
     def __init__(self, api_key: Optional[str] = None, top_k: int = 5):
-        self.api_key = api_key
         self.top_k = top_k
         self._setup_reranker()
 
     def _setup_reranker(self):
         try:
-            self.reranker = CohereRerank(
-                cohere_api_key=self.api_key,
-                top_n=self.top_k
-            )
+            import os
+            from transformers import AutoModelForSequenceClassification, AutoTokenizer
+
+            # Путь для локального кеширования модели
+            cache_dir = os.environ.get("TRANSFORMERS_CACHE", os.path.join(os.path.expanduser("~"), ".cache", "huggingface"))
+            os.makedirs(cache_dir, exist_ok=True)
+            logger.info(f"Используем кеш моделей: {cache_dir}")
+
+            # Загружаем модель и токенизатор для реранкинга с параметрами для стабильной загрузки
+            model_name = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+
+            # Максимальное количество попыток загрузки
+            max_retries = 3
+            retry_count = 0
+            last_error = None
+
+            while retry_count < max_retries:
+                try:
+                    logger.info(f"Попытка {retry_count+1} загрузки модели {model_name}")
+                    self.tokenizer = AutoTokenizer.from_pretrained(
+                        model_name,
+                        cache_dir=cache_dir,
+                        local_files_only=os.path.exists(os.path.join(cache_dir, model_name))
+                    )
+                    self.model = AutoModelForSequenceClassification.from_pretrained(
+                        model_name,
+                        cache_dir=cache_dir,
+                        local_files_only=os.path.exists(os.path.join(cache_dir, model_name))
+                    )
+                    self.reranker = True
+                    logger.info(f"Модель {model_name} успешно загружена")
+                    break
+                except Exception as e:
+                    retry_count += 1
+                    last_error = e
+                    logger.warning(f"Ошибка при загрузке модели (попытка {retry_count}): {e}")
+                    import time
+                    time.sleep(2)  # Пауза перед следующей попыткой
+
+            if self.reranker is not True:
+                logger.error(f"Не удалось загрузить модель после {max_retries} попыток: {last_error}")
+                self.reranker = None
+
         except Exception as e:
-            logger.error(f"Ошибка при инициализации Cohere Reranker: {e}")
+            logger.error(f"Ошибка при инициализации Transformer Reranker: {e}")
             self.reranker = None
 
     def rerank(self, query: str, documents: List[Dict]) -> List[Dict]:
         """Переранжирует документы для повышения релевантности"""
         if not self.reranker:
-            logger.warning("Reranker не инициализирован, возвращаем исходные документы")
-            return documents[:self.top_k]
+            logger.warning("Reranker не инициализирован, возвращаем исходные документы с базовым ранжированием")
+            # Простое ранжирование на основе имеющихся скоров
+            sorted_docs = sorted(documents, key=lambda x: x.get("score", 0), reverse=True)
+            return sorted_docs[:self.top_k]
 
         try:
-            # Конвертируем в формат LangChain Document
-            langchain_docs = []
+            import torch
+            import torch.nn.functional as F
+
+            # Создаём пары запрос-документ для реранкинга
+            pairs = []
             for doc in documents:
-                langchain_docs.append(Document(
-                    page_content=doc["text"],
-                    metadata={
-                        "score": doc.get("score", 0),
-                        "created_at": doc.get("created_at", ""),
-                        "article_id": doc.get("article_id", 0),
-                        "metadata": doc.get("metadata", {})
-                    }
-                ))
+                pairs.append((query, doc["text"]))
 
-            # Выполняем переранжирование
-            reranked_docs = self.reranker.compress_documents(langchain_docs, query=query)
+            # Токенизируем пары и вычисляем оценки релевантности
+            features = self.tokenizer(
+                [pair[0] for pair in pairs],
+                [pair[1] for pair in pairs],
+                padding=True,
+                truncation=True,
+                return_tensors="pt"
+            )
 
-            # Конвертируем обратно в исходный формат
-            result = []
-            for doc in reranked_docs:
-                result.append({
-                    "text": doc.page_content,
-                    "score": doc.metadata.get("score", 0),
-                    "created_at": doc.metadata.get("created_at", ""),
-                    "article_id": doc.metadata.get("article_id", 0),
-                    "metadata": doc.metadata.get("metadata", {})
-                })
+            with torch.no_grad():
+                scores = self.model(**features).logits.squeeze(-1).tolist()
 
-            return result
+            # Создаём новый список документов с оценками
+            docs_with_scores = []
+            for i, doc in enumerate(documents):
+                doc_copy = doc.copy()
+                doc_copy["score"] = scores[i]
+                docs_with_scores.append(doc_copy)
+
+            # Сортируем документы по убыванию оценки
+            reranked_docs = sorted(docs_with_scores, key=lambda x: x["score"], reverse=True)
+
+            # Возвращаем top_k документов
+            return reranked_docs[:self.top_k]
 
         except Exception as e:
             logger.error(f"Ошибка при переранжировании документов: {e}")
@@ -266,7 +309,6 @@ class RAGAgentOrchestrator:
                  llm: BaseChatModel, 
                  chunk_searcher, 
                  sentence_transformer,
-                 cohere_api_key: Optional[str] = None,
                  proxy_api_url: str = "https://api.proxyapi.ru/openai/v1/chat/completions"):
         self.llm = llm
         self.chunk_searcher = chunk_searcher
@@ -276,7 +318,7 @@ class RAGAgentOrchestrator:
         # Инициализация агентов
         self.query_analyzer = QueryAnalyzer(llm)
         self.query_expander = QueryExpander(llm)
-        self.document_reranker = DocumentReranker(api_key=cohere_api_key)
+        self.document_reranker = DocumentReranker()
         self.answer_generator = AnswerGenerator(llm)
         self.answer_evaluator = AnswerEvaluator(llm)
 

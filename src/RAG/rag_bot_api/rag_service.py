@@ -24,6 +24,7 @@ class RAGService:
                  model_name: str = 'gpt-3.5-turbo',
                  embedding_model_name: str = 'all-MiniLM-L6-v2',
                  use_agents: bool = True):
+
         self.searcher = ChunkSearcher()
         self.model = SentenceTransformer(embedding_model_name)
         self.api_key = api_key
@@ -36,7 +37,7 @@ class RAGService:
                 temperature=0,
                 model_name=model_name,
                 api_key=api_key,
-                openai_api_base=self.proxy_api_url.rsplit('/chat/completions', 1)[0]  RL
+                openai_api_base=self.proxy_api_url.rsplit('/chat/completions', 1)[0]
             )
 
             # Если указан API ключ и включены агенты, инициализируем оркестратор
@@ -45,7 +46,6 @@ class RAGService:
                     llm=self.llm,
                     chunk_searcher=self.searcher,
                     sentence_transformer=self.model,
-                    cohere_api_key=api_key,  # Используем тот же ключ для Cohere Reranker
                     proxy_api_url=self.proxy_api_url
                 )
         else:
