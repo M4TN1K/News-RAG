@@ -57,6 +57,21 @@ prompt_template = """
 - Указывай дату и источник, если это релевантно.
 """
 
+prompt_template_agents = """
+Ты — новостной блогер. Используй следующую информацию для ответа:
+
+{context}
+
+Вопрос: {question}
+ 
+Ответ системы мультиагентов: {agent_answer}
+
+Инструкции:
+- Опираешься только на эту статью.
+- Если информация не соответствует вопросу — скажи об этом.
+- Указывай дату и источник, если это релевантно.
+"""
+
 
 class QuestionRequest(BaseModel):
     question: str
@@ -79,7 +94,10 @@ async def ask(request: QuestionRequest):
         # Получение контекста с помощью RAG
         rag_result = rag.answer(request.question)
 
-        prompt = prompt_template.format(context=rag_result["context"], question=request.question)
+        if "final_answer" not in rag_result.keys():
+            prompt = prompt_template.format(context=rag_result["context"], question=request.question)
+        else:
+            prompt = prompt_template_agents.format(context=rag_result["context"], question=request.question, agent_answer=rag_result["final_answer"])
 
         messages = [
             {"role": "system", "content": "Ты — помощник, который использует предоставленный контекст для ответов."},
