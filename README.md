@@ -79,18 +79,18 @@ docker-compose up -d
 
 ```
 src/
-├── RAG/                    # RAG система и API
-│   ├── telegram_bot/       # Telegram бот
-│   ├── reranker/          # Система переранжирования
+├── RAG/ 
+│   ├── data/               # FAISS индексы
+│   ├── faiss_search/       # Компонент векторного поиска (FAISS)
+│   ├── rag_bot_api/        # Вeб - приложение
 │   └── requirements.txt    # Зависимости RAG системы
+├── telegram_bot/          # Telegram бот на aiogram
 ├── Parser/                 # Парсер новостей
-├── ChunkProcessor/         # Обработка текста
-├── faiss_search/          # Векторный поиск
-├── dags/                   # Airflow DAG'и
-├── airflow/               # Конфигурация Airflow
-├── config/                # Конфигурационные файлы
-├── SQL/                   # SQL скрипты
-└── docker-compose.yaml    # Конфигурация Docker
+├── ChunkProcessor/         # Обработка текста и разбиение на чанки  
+├── dags/                   # Airflow DAG'и для автоматизации процессов
+├── airflow/                # Конфигурация Airflow
+├── SQL/                    # SQL скрипты для инициализации БД
+└── docker-compose.yaml     # Конфигурация Docker для всех сервисов
 ```
 
 ## Использование
