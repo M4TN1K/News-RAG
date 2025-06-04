@@ -112,15 +112,12 @@ class DocumentReranker:
             import os
             from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
-            # Путь для локального кеширования модели
             cache_dir = os.environ.get("TRANSFORMERS_CACHE", os.path.join(os.path.expanduser("~"), ".cache", "huggingface"))
             os.makedirs(cache_dir, exist_ok=True)
             logger.info(f"Используем кеш моделей: {cache_dir}")
 
-            # Загружаем модель и токенизатор для реранкинга с параметрами для стабильной загрузки
             model_name = "cross-encoder/ms-marco-MiniLM-L-6-v2"
 
-            # Максимальное количество попыток загрузки
             max_retries = 3
             retry_count = 0
             last_error = None
