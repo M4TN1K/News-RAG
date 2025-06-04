@@ -22,7 +22,7 @@ class RAGService:
     def __init__(self, 
                  api_key: str = None, 
                  model_name: str = 'gpt-3.5-turbo',
-                 embedding_model_name: str = 'all-MiniLM-L6-v2',
+                 embedding_model_name: str = 'sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2',
                  use_agents: bool = True):
 
         self.searcher = ChunkSearcher()
