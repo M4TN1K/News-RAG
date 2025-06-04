@@ -102,5 +102,5 @@ class ChunkProducer:
 
 
 if __name__ == "__main__":
-    producer = ChunkProducer(words_per_chunk=500)
+    producer = ChunkProducer(words_per_chunk=150)
     producer.run()
