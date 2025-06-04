@@ -76,9 +76,7 @@ class RAGService:
             except Exception as e:
                 logger.error(f"Ошибка при использовании мультиагентской системы: {e}")
                 logger.info("Переключаемся на базовый подход")
-                # Если произошла ошибка, переключаемся на базовый подход
 
-        # Базовый подход (как был раньше)
         logger.info(f"Используем базовый подход для запроса: {question}")
         query_embedding = self.model.encode([question], convert_to_tensor=False)
         results = self.searcher.search(np.array(query_embedding), k=k)
