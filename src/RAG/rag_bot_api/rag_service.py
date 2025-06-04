@@ -40,7 +40,6 @@ class RAGService:
                 openai_api_base=self.proxy_api_url.rsplit('/chat/completions', 1)[0]
             )
 
-            # Если указан API ключ и включены агенты, инициализируем оркестратор
             if use_agents:
                 self.orchestrator = RAGAgentOrchestrator(
                     llm=self.llm,
@@ -59,15 +58,12 @@ class RAGService:
         использует мультиагентскую систему для обработки запроса.
         В противном случае использует базовый подход.
         """
-
-        # Проверяем, можно ли использовать мультиагентскую систему
+        
         if self.use_agents and hasattr(self, 'orchestrator'):
             try:
-                # Используем мультиагентскую систему
                 logger.info(f"Используем мультиагентскую систему для запроса: {question}")
                 result = self.orchestrator.process_query(question, k=k)
 
-                # Добавляем поля для обратной совместимости
                 if "context" not in result:
                     result["context"] = "\n\n".join([doc[:200] + "..." for doc in result.get("context_used", [])])
 
